@@ -14,7 +14,7 @@ from qdrant_client.http.models import ScoredPoint
 from semantic_router import Route
 from semantic_router.encoders import HuggingFaceEncoder
 from semantic_router.layer import RouteLayer
-from sentence_transformers import SentenceTransformer
+# from sentence_transformers import SentenceTransformer
 from vertexai.generative_models import (
     # ChatSession,
     GenerativeModel,
@@ -23,6 +23,7 @@ from vertexai.generative_models import (
     ResponseValidationError,
     SafetySetting,
 )
+from vertexai.language_models import TextEmbeddingInput, TextEmbeddingModel
 
 SESSION_TIMEOUT_SECONDS = 180
 
@@ -43,9 +44,23 @@ QDRANT_URL = os.getenv("QDRANT_URL")  # Hosted Qdrant URL
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 
 qdrant_client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
-embedding_model = SentenceTransformer("models/gte-embedding", trust_remote_code=True, device="cuda")
+# embedding_model = SentenceTransformer("models/gte-embedding", trust_remote_code=True, device="cuda")
 PROJECT_ID = "gen-lang-client-0404349304"
 vertexai.init(project=PROJECT_ID, location="us-central1")
+
+
+def embed_text(
+    texts: list[str] = ["Retrieve a function that adds two numbers"],
+    task: str = "QUESTION_ANSWERING",
+    model_name: str = "text-embedding-005",
+    dimensionality: int | None = 768,
+) -> list[list[float]]:
+    dimensionality = 768
+    model = TextEmbeddingModel.from_pretrained(model_name)
+    inputs = [TextEmbeddingInput(text, task) for text in texts]
+    kwargs = dict(output_dimensionality=dimensionality) if dimensionality else {}
+    embeddings = model.get_embeddings(inputs, **kwargs)
+    return [embedding.values for embedding in embeddings]
 
 prompt_injection_route = Route(
     name="prompt_injection",
@@ -216,7 +231,7 @@ def retrieve_context(query: str) -> str:
     Retrieve relevant context from Qdrant for the given query.
     """
     
-    query_embedding = embedding_model.encode(query).tolist()
+    query_embedding = embed_text(query)[0]
 
     search_results: List[ScoredPoint] = qdrant_client.search(
         collection_name="Portfolio_Store",
